@@ -242,8 +242,4 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         else:
             st.error("⚠️ **Perlu Perhatian.** Produktivitas karyawan ini di bawah rata-rata.")
 
-    with st.expander("Lihat Detail Input yang Diproses"):
-        st.write("Data mentah dari input Anda:")
-        st.json(user_input)
-        st.write("Data setelah diproses dan diberikan ke model:")
-        st.dataframe(processed_input)
+   
