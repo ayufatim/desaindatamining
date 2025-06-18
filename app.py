@@ -8,8 +8,9 @@ from sklearn.preprocessing import MinMaxScaler
 
 # Muat model dan scaler yang telah disimpan
 try:
-    model = joblib.load('stacking_model_beginning_split.pkl')
-    scaler = joblib.load('scaler.pkl')
+    model = joblib.load('stacked_model_2.pkl')
+    scalerinput = joblib.load('scaler_input.pkl')
+    scalertarget = joblib.load('scaler_Target.pkl')
 except FileNotFoundError:
     st.error("Pastikan file 'stacking_model_beginning_split.pkl' dan 'scaler.pkl' berada di folder yang sama.")
     st.stop()
@@ -81,36 +82,33 @@ def preprocess_input(data):
 
     # 3. Proses fitur kategorikal (One-Hot dan Label Encoding)
     # Department
-    if 'Department_' + data['Department'] in input_df.columns:
-        input_df.loc[0, 'Department_' + data['Department']] = 1
+    dept_col = 'Department_' + data['Department']
+    if dept_col in input_df.columns:
+        input_df.loc[0, dept_col] = 1
     # Gender
-    if 'Gender_' + data['Gender'] in input_df.columns:
-        input_df.loc[0, 'Gender_' + data['Gender']] = 1
+    gender_col = 'Gender_' + data['Gender']
+    if gender_col in input_df.columns:
+        input_df.loc[0, gender_col] = 1
     # Job Title
-    if 'Job_Title_' + data['Job_Title'] in input_df.columns:
-        input_df.loc[0, 'Job_Title_' + data['Job_Title']] = 1
+    job_col = 'Job_Title_' + data['Job_Title']
+    if job_col in input_df.columns:
+        input_df.loc[0, job_col] = 1
     # Resigned
     if data['Resigned']:
-        input_df.loc[0, 'Resigned_True'] = 1
+        if 'Resigned_True' in input_df.columns:
+            input_df.loc[0, 'Resigned_True'] = 1
 
     # Education Level (Label Encoded)
     edu_mapping = {level: i for i, level in enumerate(categorical_options['Education_Level'])}
-    input_df.loc[0, 'Education_Level'] = edu_mapping[data['Education_Level']]
+    input_df.loc[0, 'Education_Level'] = edu_mapping.get(data['Education_Level'], 0)
 
-    # 4. Lakukan feature engineering yang sama seperti di notebook
+    # 4. Feature Engineering
     input_df['Experience_Salary_Interaction'] = input_df['Years_At_Company'] * input_df['Monthly_Salary']
-    # Hindari pembagian dengan nol
     if input_df.loc[0, 'Projects_Handled'] > 0:
         input_df['Workload_Intensity'] = input_df['Work_Hours_Per_Week'] / input_df['Projects_Handled']
     else:
         input_df['Workload_Intensity'] = 0
-
-    # Untuk Rolling_Avg_Performance, kita tidak bisa menghitungnya dari satu input.
-    # Kita bisa gunakan nilai rata-rata dari data training atau biarkan 0/nilai default.
-    # Di notebook Anda, kolom ini tidak digunakan sebagai fitur input ke model, jadi kita abaikan.
-    # Jika digunakan, Anda perlu strategi untuk menanganinya.
-    input_df['Rolling_Avg_Performance'] = 0 # Placeholder
-
+    input_df['Rolling_Avg_Performance'] = 0
     if input_df.loc[0, 'Work_Hours_Per_Week'] > 0:
         input_df['Overtime_Work_Ratio'] = input_df['Overtime_Hours'] / input_df['Work_Hours_Per_Week']
         input_df['SickDays_WorkDays_Ratio'] = input_df['Sick_Days'] / input_df['Work_Hours_Per_Week']
@@ -118,30 +116,29 @@ def preprocess_input(data):
         input_df['Overtime_Work_Ratio'] = 0
         input_df['SickDays_WorkDays_Ratio'] = 0
 
+    # 5. Validasi apakah semua kolom scaler tersedia di input_df
+    missing_cols_for_scaler = [col for col in scalerinput.feature_names_in_ if col not in input_df.columns]
+    if missing_cols_for_scaler:
+        for col in missing_cols_for_scaler:
+            input_df[col] = 0  # tambahkan kolom yang hilang sebagai 0
 
-    # 5. Scaling fitur numerik menggunakan scaler yang sudah di-load
-    # Pastikan hanya kolom yang ada di scaler yang di-transform
-    cols_to_scale = [col for col in numerical_cols if col in input_df.columns]
-    input_df[cols_to_scale] = scaler.transform(input_df[cols_to_scale])
+    # 6. Scaling fitur sesuai dengan scalerinput
+    try:
+        input_df[scalerinput.feature_names_in_] = scalerinput.transform(input_df[scalerinput.feature_names_in_])
+    except ValueError as e:
+        st.error(f"Error saat melakukan scaling: {e}")
+        st.stop()
 
-    # 6. Pastikan urutan kolom sesuai dengan model
-    # Kolom 'Performance_Score' tidak ada di X_train, jadi kita hapus dari final_feature_order
-    model_input_features = [col for col in final_feature_order_for_model if col != 'Performance_Score']
-
-    # Handle jika ada kolom hasil feature engineering yang tidak ada di training
-    for col in list(input_df.columns):
-        if col not in model_input_features:
-             model_input_features.append(col) # tambahkan jika perlu
-
-    # Reorder dan filter kolom agar sesuai dengan input model
-    final_input_df = pd.DataFrame(columns=model.feature_names_in_)
+    # Reorder kolom sesuai urutan input model dan pastikan semua kolom tersedia
     for col in model.feature_names_in_:
-        if col in input_df.columns:
-            final_input_df[col] = input_df[col]
-        else:
-            final_input_df[col] = 0 # Jika ada kolom yang hilang, isi dengan 0
-            
+        if col not in input_df.columns:
+            input_df[col] = 0  # tambahkan kolom kosong jika tidak ada
+
+    # Ambil hanya kolom yang dibutuhkan model dan dalam urutan yang benar
+    final_input_df = input_df[model.feature_names_in_].copy()
+
     return final_input_df
+
 
 
 # --- ANTARMUKA STREAMLIT ---
@@ -216,7 +213,6 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         'Resigned': resigned
     }
 
-   
     # Proses input
     processed_input = preprocess_input(user_input)
 
@@ -224,8 +220,8 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
     prediction_scaled = model.predict(processed_input)
 
     # Kembalikan ke skala asli
-    # prediction_original = target_scaler.inverse_transform(prediction_scaled.reshape(-1, 1))
-    prediction_original = prediction_scaled.reshape(-1, 1)
+    prediction_original = scalertarget.inverse_transform(prediction_scaled.reshape(-1, 1))
+    # prediction_original = prediction_scaled.reshape(-1, 1)
 
     # Tampilkan hasil
     st.subheader("Hasil Prediksi")
@@ -235,11 +231,11 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         
     with col2:
         score = prediction_original[0][0]
-        if score >= 1.0:
+        if score >= 4.5:
             st.success("🎉 **Luar Biasa!** Produktivitas karyawan ini sangat tinggi.")
-        elif score >= 0.6:
+        elif score >= 3.5:
             st.info("👍 **Baik.** Produktivitas karyawan ini di atas rata-rata.")
-        elif score >= 0.3:
+        elif score >= 2.5:
             st.warning("😐 **Cukup.** Produktivitas karyawan ini berada di level rata-rata.")
         else:
             st.error("⚠️ **Perlu Perhatian.** Produktivitas karyawan ini di bawah rata-rata.")
