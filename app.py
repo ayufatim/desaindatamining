@@ -216,6 +216,7 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         'Resigned': resigned
     }
 
+   
     # Proses input
     processed_input = preprocess_input(user_input)
 
@@ -223,7 +224,8 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
     prediction_scaled = model.predict(processed_input)
 
     # Kembalikan ke skala asli
-    prediction_original = target_scaler.inverse_transform(prediction_scaled.reshape(-1, 1))
+    # prediction_original = target_scaler.inverse_transform(prediction_scaled.reshape(-1, 1))
+    prediction_original = prediction_scaled.reshape(-1, 1)
 
     # Tampilkan hasil
     st.subheader("Hasil Prediksi")
@@ -233,11 +235,11 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         
     with col2:
         score = prediction_original[0][0]
-        if score >= 4.5:
+        if score >= 1.0:
             st.success("🎉 **Luar Biasa!** Produktivitas karyawan ini sangat tinggi.")
-        elif score >= 3.5:
+        elif score >= 0.6:
             st.info("👍 **Baik.** Produktivitas karyawan ini di atas rata-rata.")
-        elif score >= 2.5:
+        elif score >= 0.3:
             st.warning("😐 **Cukup.** Produktivitas karyawan ini berada di level rata-rata.")
         else:
             st.error("⚠️ **Perlu Perhatian.** Produktivitas karyawan ini di bawah rata-rata.")
