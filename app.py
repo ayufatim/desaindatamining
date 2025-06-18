@@ -216,6 +216,7 @@ if st.sidebar.button("Prediksi Skor Kinerja", use_container_width=True):
         'Resigned': resigned
     }
 
+   
     # Proses input
     processed_input = preprocess_input(user_input)
 
